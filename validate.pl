@@ -1,3 +1,4 @@
+# -*- tab-width: 4 -*-
 #!/opt/local/bin/perl
 
 #STDIN:    Debtors list
