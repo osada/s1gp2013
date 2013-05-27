@@ -17,13 +17,14 @@ data_size    = int(sys.argv[1])
 seed         = int(sys.argv[2])
 
 # Constant Variables
-need_min     = 4000
-need_wm      = 30000     # Watermark for calculating rate
+need_min     = 6000
+need_wm      = 20000     # Watermark for calculating rate
 month_offset = 201401
 period_min   = 3
 period_max   = 24
 rate_min     = 0.0100
-rate_max     = 0.1920
+rate_max     = 0.1200
+trial_max    = 100
 
 # Specifying random seed
 random.seed(seed)      # different from belows
@@ -41,25 +42,32 @@ def get_need(need_min):
     need = 0
     while need < need_min:
         rv = random.uniform(0, 1)
-        if rv < 0.5:
-            need = int(norm.rvs(loc=800, scale=400)) * 10
-        elif rv < 0.65:
-            need = int(norm.rvs(loc=1300, scale=100)) * 10
+        if rv < 0.6:
+            need = int(norm.rvs(loc=1200, scale=500)) * 10
+        elif rv < 0.85:
+            need = int(norm.rvs(loc=2000, scale=100)) * 10
         else:
-            need = int(norm.rvs(loc=2000, scale=200)) * 10
+            need = int(norm.rvs(loc=2800, scale=200)) * 10
     return need
 
 def get_rate(need):
-    rate = 0.0
-    while rate < rate_min or rate > rate_max:
+    rate  = 0.0
+    count = 0 
+    while rate < rate_min or rate > rate_max or count < trial_max:
         rv = random.uniform(0, 1)
-        if rv < 0.6:
-            rate = int(norm.rvs(loc=45, scale=20)) / 1000.0
-        elif rv < 0.7:
-            rate = int(norm.rvs(loc=150, scale=10)) / 1000.0
+        if rv < 0.3:
+            rate = int(norm.rvs(loc=35, scale=5)) / 1000.0
+        elif rv < 0.4:
+            rate = int(norm.rvs(loc=60, scale=10)) / 1000.0
         else:
-            rate = int(norm.rvs(loc=80, scale=30)) / 1000.0
-        rate = round(rate * (1.0 - 1.0 * need / need_wm), 3) 
+            rate = int(norm.rvs(loc=25, scale=50)) / 1000.0
+        # Adjusting rate using needs (Low need's rate is forced be large)
+        if need < need_wm:
+            rate = round(rate * need_wm / need, 3) 
+        # Break infinite loop
+        if count == trial_max and (rate < rate_min or rate > rate_max):
+            rate = round(random.uniform(rate_min, rate_max), 3)
+        count += 1
     return rate
 
 # Customer ID: 0 -- data_size
