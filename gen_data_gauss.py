@@ -74,7 +74,7 @@ def get_rate(need):
 for id in range(data_size):
     # Need Money: 4000 --
     need = get_need(need_min)
-    # Interest Rate: 0.0100 -- 0.1920
+    # Interest Rate: 0.0100 -- 0.1200
     # rate = round(random.uniform(rate_min, rate_max), 4)
     rate = get_rate(need)
     # From Month: 201401 -- 201510
