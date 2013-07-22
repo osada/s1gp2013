@@ -1,18 +1,22 @@
 #!/opt/local/bin/perl
+# -*- coding: utf-8; tab-width: 4 -*-
 
 #STDIN:    Needs List
 #$ARGV[0]: Fund
 #$ARGV[1]: Trial Times
 #$ARGV[2]: Seed
 
+use POSIX;
+use warnings;
+
 #Definition
-$MONTH_START   = 201401;
-$MONTH_END     = 201412;
+$MONTH_START   = 201301;
+$MONTH_END     = 201612;
 $ATTEMPT_LIMIT = 100;
 
 if ($#ARGV != 2) {
     print "Error: missing argment\n";
-    print "Usage: <this> <fund> <trial_times> <seed>\n";
+    print "Usage: <this> <fund> <trial_times> <seed> < <needers.txt>\n";
     exit 1;
 }
 
@@ -25,98 +29,114 @@ srand $SEED;
 
 # Initialize Output Variables
 $GAIN_MAX            = -1;
-$USED_RATE_MAX       = 0;
-@LOAN_LIST_MAX       = ();
+@DEBTORS_MAX         = ();
 $STAT_CANCEL_BY_DUP  = 0;
 $STAT_CANCEL_BY_OVER = 0;
 $STAT_UPDATE         = 0;
 
 # Read Data
-@NEED_LIST = <STDIN>;
+@NEEDERS = <STDIN>;
 
 foreach (1 .. $TRIAL) {
-    # Initialization
-	$FUND      = $ARGV[0];
+    # Initialization Internal variables
+    $FUND      = $ARGV[0];
     $USED      = 0;
-	$USED_RATE = 0;
     $GAIN      = 0;
-    @LOAN_LIST = ();
+    @DEBTORS   = ();
 
-	#print "--- Traial: $_ ---\n";
+    #print "--- Traial: $_ ---\n";
+    $MONTH_NOW = $MONTH_START;
+	while ($MONTH_NOW <= $MONTH_END) {
 
-	for ($MONTH_NOW = $MONTH_START; $MONTH_NOW <= $MONTH_END; $MONTH_NOW++) {
 		#print "MONTH: $MONTH_NOW, (FUND, USED) = ($FUND, $USED)\n";
 		# Collecting loans
-		foreach $CUSTOMER (@LOAN_LIST) {
-			chomp($CUSTOMER);
-			@CUSTOMER_INFO = split(/\s+/, $CUSTOMER);
-			$ID     = $CUSTOMER_INFO[0];
-			$NEED   = $CUSTOMER_INFO[1];
-			$RATE   = $CUSTOMER_INFO[2];
-			$MONTH  = $CUSTOMER_INFO[3];
-			$PERIOD = $CUSTOMER_INFO[4];
-			
-			if ($MONTH_NOW == $MONTH + $PERIOD) {
-				$FUND = $FUND + $NEED * $RATE * $PERIOD / 12.0;
-				$USED = $USED - $NEED;
+		foreach $DEBTOR (@DEBTORS) {
+			chomp($DEBTOR);
+			@DEBTOR_INFO = split(/\s+/, $DEBTOR);
+			$ID     = $DEBTOR_INFO[0];
+			$AMOUNT = $DEBTOR_INFO[1];
+			$RATE   = $DEBTOR_INFO[2];
+			$MONTH  = $DEBTOR_INFO[3];
+			$PERIOD = $DEBTOR_INFO[4];
+
+			# Convert Redemption Period to Month
+			$M_MONTH = floor($MONTH / 100.0) * 100
+				+ ($MONTH % 100 + $PERIOD % 12) % 12
+				+ floor(($MONTH % 100 + $PERIOD % 12) / 12) * 100
+				+ floor($PERIOD / 12) * 100;
+			if ($M_MONTH % 100 == 0) {
+				$M_MONTH = $M_MONTH - 100 + 12;
+			}
+
+			if ($MONTH_NOW == $M_MONTH) {
+				$THIS_GAIN = $AMOUNT * $RATE * $PERIOD / 12.0;
+				$GAIN = $GAIN + floor($THIS_GAIN);
+				$FUND = $FUND + floor($THIS_GAIN);
+				$USED = $USED - $AMOUNT;
 			}
 		}
-		#print "clearing -> ($FUND, $USED)\n";
-		# Loaning
+		#print "collecting -> ($FUND, $USED)\n";
+
+		# Organizing loans
 	  LOOPMARK: for ($ATTEMPT = 0; $USED < $FUND && $ATTEMPT < $ATTEMPT_LIMIT;
 					 $ATTEMPT++) {
-		  # Select one data
-		  $ELEM = int(rand($#NEED_LIST + 1));
-		  $NEEDER = $NEED_LIST[$ELEM];
+		  # Select one needer
+		  $ELEM = int(rand($#NEEDERS + 1));
+		  $NEEDER = $NEEDERS[$ELEM];
 		  
-		  # Cleansing data
+		  # get needer's information
 		  chomp($NEEDER);
 		  @NEEDER_INFO = split(/\s+/, $NEEDER);
 		  $ID     = $NEEDER_INFO[0];
-		  $NEED   = $NEEDER_INFO[1];
+		  $AMOUNT = $NEEDER_INFO[1];
 		  $RATE   = $NEEDER_INFO[2];
 		  $MONTH  = $NEEDER_INFO[3];
 		  $PERIOD = $NEEDER_INFO[4]; 
 		  
-		  # check duplicated loan
-		  foreach (@LOAN_LIST) {
-			  if ($ID == $_) {
+		  # drop a candidate having not $MONTH_NOW
+		  if ($MONTH != $MONTH_NOW) {next LOOPMARK;}
+
+		  # check duplicated
+		  foreach $DEBTOR (@DEBTORS) {
+			  chomp($DEBTOR);
+			  @DEBTOR_INFO = split(/\s+/, $DEBTOR);
+			  $D_ID     = $DEBTOR_INFO[0];
+			  if ($ID == $D_ID) {
 				  $STAT_CANCEL_BY_DUP++;
 				  next LOOPMARK;
 			  }
 		  }
-		  
-		  # drop a candidate having not $MONTH_NOW
-		  if ($MONTH != $MONTH_NOW) {next LOOPMARK;}
-		  
-		  # drop a candidate over period
-		  if ($MONTH_END < $MONTH + $PERIOD) {next LOOPMARK;}
-
+		  		  
 		  # add loan list if possible
-		  if ($USED + $NEED <= $FUND) {
-			  push(@LOAN_LIST, $NEEDER);
-			  $USED = $USED + $NEED;
-			  $GAIN = $GAIN + $NEED * $RATE * $PERIOD / 12.0;
-		  }
-		  else {
+		  if ($USED + $AMOUNT <= $FUND) {
+			  push(@DEBTORS, $NEEDER);
+			  $USED = $USED + $AMOUNT;
+		  } else {
+			  # few money to organize loans
+			  $STAT_CANCEL_BY_OVER++;
 			  last LOOPMARK;
 		  }
-	  }
-		$USED_RATE = $USED_RATE + $USED / $FUND / 12.0;
-		#print "loaning -> ($FUND, $USED)\n";
-		#print "GAIN: $GAIN, USED_RATE: " . $USED / $FUND ."\n\n"
-
-	}
-
-	if ($GAIN > $GAIN_MAX) {
-			$GAIN_MAX = $GAIN;
-			$USED_RATE_MAX = $USED_RATE;
-			@LOAN_LIST_MAX = @LOAN_LIST;
+	  } # End LOOPMARK
+		#print "organizing -> ($FUND, $AMOUNT)\n";
+		#print "GAIN: $GAIN, USED_RATE: " . $USED / $FUND ."\n\n";
+		
+		# Incriment MONTH_NOW
+		if ($MONTH_NOW % 100 == 12) {
+			$MONTH_NOW = $MONTH_NOW + 100 - 11;
+		} else {
+			$MONTH_NOW++;
 		}
+    }
+	
+	if ($GAIN > $GAIN_MAX) {
+		$STAT_UPDATE++;
+		$GAIN_MAX = $GAIN;
+		@DEBTORS_MAX = @DEBTORS;
+	}
 }
 
 # Output Results
-print "GAIN_MAX = $GAIN_MAX, USED_RATE_MAX = $USED_RATE_MAX\n";
-foreach (@LOAN_LIST_MAX) {
+print "GAIN_MAX = $GAIN_MAX\n";
+foreach (@DEBTORS_MAX) {
 	print "$_\n";
 }
