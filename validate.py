@@ -48,15 +48,16 @@ def record():
     f.close()
 
 ### Main ###
+# Read STDIN into debtors
+for line in sys.stdin.readlines():
+    debtors.append(line.rstrip().split("\t"))
+debtors.sort(key=lambda x:(int(x[0])))
+
 # Read file into needers
 f = open(n_filename, "r")
 for line in f:
     needers.append(line.rstrip().split("\t"))
 f.close()
-
-# Read STDIN into debtors
-for line in sys.stdin.readlines():
-    debtors.append(line.rstrip().split("\t"))
 
 # Sort by start_month(3) in neesers
 needers.sort(key=lambda x:(x[3],x[0]))
@@ -66,9 +67,27 @@ f = open(r_filename, "w")
 f.close()
 record()
 
+# 0: head of needers  3: month, that is, it's the minimum month
+month_now = int(needers[0][3])
+
+# Check duplicated debtor
+id_min = -1
+for debtor in debtors:
+    # print "id = %d, id_min = %d" % (int(debtor[0]), id_min)
+    if int(debtor[0]) > id_min:
+        id_min = int(debtor[0])
+    else:
+        print "Error: Duplicated debtor"
+        sys.exit(1)
+
+
+# Caluclate gain
 while month_now <= month_end:
 
-    # print "now = %s" % month_now
+    #print "now = %s\tcandidate = %d" % (month_now, len(needers))
+    print "now = %s" % month_now,
+
+    break_counter = 0
 
     for needer in needers:
         n_id     = needer[0]
@@ -76,6 +95,12 @@ while month_now <= month_end:
         n_rate   = float(needer[2])
         n_month  = int(needer[3])
         n_period = int(needer[4])
+
+        # Delete it from needers for acceleration
+        if month_now > get_maturity_month(n_month, n_period):
+            #needers.remove(needer) # Too heavy
+            break_counter += 1
+            continue
 
         for debtor in debtors:
             d_id = debtor[0]
@@ -100,11 +125,16 @@ while month_now <= month_end:
                 # print " new_used = %s" % used
                 if used > fund:
                     print "ERROR: the amount can not be accepted."
-                    sys.exit(1)
+                    sys.exit(2)
                 break
 
     # Record Data
     record()
+
+    # Exiting Condition
+    print "\tbreak_counter = %d" % break_counter
+    if break_counter >= len(needers):
+        break
 
     # Incriment month_now
     if month_now % 100 == 12:
